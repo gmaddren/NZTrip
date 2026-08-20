@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>South Island Grand Loop — Trip Planner</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-deep:#0d2233; --navy-card:#132c3f; --navy-card-hi:#183548;
+    --teal:#3fa9a0; --teal-dim:#2c7972; --gold:#d4a73d;
+    --ice:#eef3f2; --ice-dim:#a9bcc2; --marker:#d9622b;
+    --line:rgba(238,243,242,0.14); --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0; background:var(--navy-deep); color:var(--ice); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased;}
+  ::selection{background:var(--gold);color:var(--navy-deep);}
+
+  .hero{
+    position:relative; padding:60px 24px 28px;
+    background:
+      radial-gradient(ellipse at 20% -10%, rgba(63,169,160,0.25), transparent 55%),
+      radial-gradient(ellipse at 90% 10%, rgba(212,167,61,0.14), transparent 45%),
+      var(--navy-deep);
+    overflow:hidden; border-bottom:1px solid var(--line);
+  }
+  .hero-contours{position:absolute; inset:0; opacity:0.18; pointer-events:none;}
+  .hero-inner{max-width:1180px;margin:0 auto;position:relative;}
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace; font-size:12.5px; letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--teal); display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::before{content:"";width:22px;height:1px;background:var(--teal);display:inline-block;}
+  h1{font-family:'Fraunces',serif; font-weight:600; font-size:clamp(30px,5.4vw,50px); line-height:1.05; margin:14px 0 10px; letter-spacing:-0.01em;}
+  h1 em{font-style:italic;font-weight:500;color:var(--gold);}
+  .hero-sub{max-width:640px;color:var(--ice-dim);font-size:15.5px;line-height:1.6;margin-bottom:26px;}
+
+  .tripmeter{display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; background:rgba(255,255,255,0.02);}
+  .tm-stat{flex:1 1 140px; padding:16px 20px; border-right:1px solid var(--line);}
+  .tm-stat:last-child{border-right:none;}
+  .tm-num{font-family:'Fraunces',serif; font-size:24px; font-weight:600; color:var(--gold); display:block;}
+  .tm-label{font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--ice-dim);}
+
+  section{max-width:1700px;margin:0 auto;padding:52px 20px;}
+  .section-head{margin-bottom:24px; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-end; gap:14px;}
+  .section-head .eyebrow{margin-bottom:8px;}
+  .section-head h2{font-family:'Fraunces',serif; font-weight:600; font-size:clamp(24px,4vw,34px); margin:0;}
+  .section-head p{color:var(--ice-dim);max-width:640px;margin-top:8px;line-height:1.55;}
+
+  .btn{
+    font-family:'Inter',sans-serif; font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:8px;
+    border:1px solid var(--line); background:rgba(255,255,255,0.03); color:var(--ice);
+    cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+  }
+  .btn:hover{border-color:var(--teal);color:var(--teal);}
+  .btn-primary{background:var(--teal); color:var(--navy-deep); border-color:var(--teal); font-weight:700;}
+  .btn-primary:hover{background:var(--gold); border-color:var(--gold); color:var(--navy-deep);}
+  .btn-ghost{background:transparent;}
+
+  /* ---------- TOP CONTROLS ---------- */
+  .controls-box{
+    max-width:1180px; margin:0 auto;
+    background:var(--navy-card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px 20px; display:flex; flex-wrap:wrap; gap:18px; align-items:flex-end; justify-content:space-between;
+  }
+  .ctrl-field label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ice-dim); margin-bottom:6px;}
+  .ctrl-field input[type=date]{
+    font-family:'IBM Plex Mono',monospace; font-size:13.5px; background:rgba(255,255,255,0.05);
+    border:1px solid var(--line); color:var(--ice); padding:8px 10px; border-radius:8px; color-scheme:dark;
+  }
+  .ctrl-actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .dataio-status{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--gold);}
+
+  /* ---------- MAP ---------- */
+  #map{width:100%; height:420px; border-radius:var(--radius); border:1px solid var(--line); filter:saturate(0.9);}
+  .map-legend{display:flex; gap:18px; flex-wrap:wrap; margin-top:14px; font-size:12.5px; color:var(--ice-dim);}
+  .map-legend span{display:flex;align-items:center;gap:6px;}
+  .legend-dot{width:10px;height:10px;border-radius:50%;background:var(--marker);display:inline-block;}
+
+  /* ---------- ITINERARY TABLE ---------- */
+  .table-wrap{max-width:1700px; margin:0 auto; overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--navy-card);}
+  table.itin{width:100%; border-collapse:collapse; min-width:1160px; font-size:13.5px;}
+  table.itin thead th{
+    text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ice-dim); padding:12px 10px; border-bottom:1px solid var(--line); white-space:nowrap; position:sticky; top:0; background:var(--navy-card);
+  }
+  table.itin tbody td{padding:16px 10px; border-bottom:1px solid rgba(255,255,255,0.05); vertical-align:top;}
+  table.itin tbody tr:hover{background:rgba(255,255,255,0.02);}
+  table.itin tbody tr.hike-row td:first-child{box-shadow:inset 3px 0 0 var(--gold);}
+  table.itin tbody tr.nonight-row{opacity:0.7;}
+  .row-n{font-family:'IBM Plex Mono',monospace; color:var(--teal); font-weight:600; width:28px; padding-top:20px;}
+  .row-date{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ice); white-space:nowrap; padding-top:20px;}
+  .row-select{
+    font-family:'Inter',sans-serif; font-size:13px; background:rgba(255,255,255,0.04);
+    border:1px solid var(--line); color:var(--ice); padding:6px 8px; border-radius:7px; width:100%; min-width:130px;
+  }
+  .row-dist{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ice-dim); white-space:nowrap; padding-top:20px;}
+  .row-time{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ice-dim); white-space:nowrap; padding-top:20px;}
+  .row-notes{
+    font-family:'Inter',sans-serif; font-size:12.5px; background:rgba(255,255,255,0.04);
+    border:1px solid var(--line); color:var(--ice); padding:8px 9px; border-radius:7px; width:100%;
+    resize:vertical; line-height:1.5;
+  }
+  .row-notes::placeholder{color:var(--ice-dim);}
+  .row-check{width:17px; height:17px; accent-color:var(--teal); cursor:pointer; margin-top:20px;}
+  .col-day, .col-night{min-width:140px;}
+  .col-notes, .col-hotelnotes{min-width:280px;}
+  .need-booking{color:#ff5c5c; font-weight:700; font-size:11.5px; letter-spacing:.03em; margin-top:6px;}
+  .row-actions{display:flex; gap:4px; white-space:nowrap; padding-top:18px;}
+  .row-actions button{
+    width:26px; height:26px; border-radius:7px; border:1px solid var(--line); background:rgba(255,255,255,0.03);
+    color:var(--ice-dim); font-size:14px; cursor:pointer; line-height:1; display:flex; align-items:center; justify-content:center;
+  }
+  .row-actions button:hover{border-color:var(--teal); color:var(--teal);}
+  .row-actions button.del:hover{border-color:#d9622b; color:#d9622b;}
+
+  /* ---------- HIGHLIGHTS / OVERNIGHTS ---------- */
+  .hl-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px;}
+  .hl-card{background:var(--navy-card); border:1px solid var(--line); border-radius:var(--radius); padding:18px;}
+  .hl-card h3{font-family:'Fraunces',serif; font-weight:500; font-size:17px; margin:0 0 10px; color:var(--gold);}
+  .hl-card ul{margin:0; padding-left:18px; color:var(--ice-dim); font-size:13.5px; line-height:1.7;}
+
+  .stay-bars{display:flex; flex-direction:column; gap:10px;}
+  .stay-bar-row{display:grid; grid-template-columns:170px 1fr 36px; align-items:center; gap:10px;}
+  .stay-bar-label{font-size:13px; color:var(--ice-dim);}
+  .stay-bar-track{background:rgba(255,255,255,0.05); border-radius:6px; height:10px; overflow:hidden;}
+  .stay-bar-fill{height:100%; background:linear-gradient(90deg,var(--teal-dim),var(--teal));}
+  .stay-bar-n{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ice-dim); text-align:right;}
+
+  /* ---------- PACKING ---------- */
+  .pack-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px;}
+  .pack-cat{background:var(--navy-card); border:1px solid var(--line); border-radius:var(--radius); padding:16px 18px;}
+  .pack-cat h4{margin:0 0 10px; font-family:'Fraunces',serif; font-weight:500; font-size:15px; color:var(--teal);}
+  .pack-cat label{display:flex; align-items:center; gap:9px; font-size:13.5px; color:var(--ice-dim); padding:5px 0; cursor:pointer;}
+  .pack-cat input[type=checkbox]{width:15px; height:15px; accent-color:var(--teal); flex:none;}
+  .pack-cat label.checked{color:var(--ice); text-decoration:line-through; opacity:0.6;}
+  .pack-progress{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--gold); margin-bottom:16px;}
+
+  .cal-box{
+    background:var(--navy-card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:24px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between;
+  }
+  .cal-box p{margin:0; color:var(--ice-dim); font-size:14px; max-width:480px; line-height:1.55;}
+
+  footer{text-align:center; padding:40px 20px 60px; color:var(--ice-dim); font-size:12.5px; border-top:1px solid var(--line);}
+  a{color:var(--teal);}
+  .leaflet-popup-content-wrapper{background:var(--navy-card); color:var(--ice); border-radius:10px;}
+  .leaflet-popup-tip{background:var(--navy-card);}
+  .leaflet-popup-content{font-family:'Inter',sans-serif; font-size:13px;}
+  .leaflet-popup-content b{font-family:'Fraunces',serif; font-size:14px;}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <svg class="hero-contours" viewBox="0 0 1000 300" preserveAspectRatio="none">
+    <path d="M0,220 C150,180 250,260 400,200 C550,140 650,220 800,170 C900,140 950,190 1000,160" stroke="#3fa9a0" stroke-width="1.5" fill="none"/>
+    <path d="M0,250 C150,210 250,280 400,230 C550,175 650,250 800,200 C900,170 950,215 1000,190" stroke="#3fa9a0" stroke-width="1" fill="none"/>
+    <path d="M0,190 C150,150 250,220 400,165 C550,105 650,185 800,135 C900,105 950,155 1000,125" stroke="#d4a73d" stroke-width="1" fill="none"/>
+  </svg>
+  <div class="hero-inner">
+    <div class="eyebrow" id="heroEyebrow">Aotearoa New Zealand</div>
+    <h1>South Island<br><em>Grand Loop</em></h1>
+    <p class="hero-sub">One master itinerary you build day by day — a day stop and a night stop for each row, with distances and drive times recalculated for you.</p>
+    <div class="tripmeter" id="tripmeter"></div>
+  </div>
+</div>
+
+<section id="controls">
+  <div class="controls-box">
+    <div class="ctrl-field">
+      <label for="startDateInput">Trip start date</label>
+      <input type="date" id="startDateInput">
+    </div>
+    <div class="ctrl-actions">
+      <button class="btn btn-primary" onclick="recalculate()">↻ Recalculate</button>
+      <button class="btn" onclick="addRow()">+ Add day</button>
+      <button class="btn btn-ghost" onclick="resetRows()">Reset to original</button>
+      <button class="btn" onclick="exportJSON()">⬇ Download (.json)</button>
+      <label class="btn" for="importFile">⬆ Upload (.json)</label>
+      <input type="file" id="importFile" accept="application/json" style="display:none">
+      <span class="dataio-status" id="dataioStatus"></span>
+    </div>
+  </div>
+</section>
+
+<section id="itinerary">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Day by Day</div>
+      <h2>Editable itinerary</h2>
+      <p>Each row is a day, with a start point and an overnight stop — distance and drive time are calculated directly between the two. Pick from the dropdowns, add notes and hotel details, tick off bookings, then hit Recalculate.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="itin">
+      <thead>
+        <tr>
+          <th>#</th><th>Date</th><th class="col-day">Start (day)</th><th class="col-night">Overnight (night)</th>
+          <th>Distance</th><th>Drive time</th><th class="col-notes">Notes</th><th class="col-hotelnotes">Hotel details</th><th>Booked</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div style="max-width:1700px;margin:14px auto 0;"><button class="btn" onclick="addRow()">+ Add day at end</button></div>
+</section>
+
+<section id="map-section">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">The Route</div>
+      <h2>The loop, region by region</h2>
+      <p>Built from whatever's currently in the table above, moving through each day's start and overnight stop in order. Tries live road routing first; falls back to hand-plotted highway legs, then a straight line, if that's not reachable.</p>
+    </div>
+  </div>
+  <div id="map"></div>
+  <div class="map-legend">
+    <span><span class="legend-dot"></span> Overnight stop</span>
+    <span>— Routed road</span>
+    <span style="opacity:.7">- - Straight-line (no road data for this pair)</span>
+  </div>
+</section>
+
+<section id="highlights">
+  <div class="section-head"><div><div class="eyebrow">Trip Highlights</div><h2>What this loop is built around</h2></div></div>
+  <div class="hl-grid" id="hlGrid"></div>
+</section>
+
+<section id="overnights">
+  <div class="section-head"><div><div class="eyebrow">Where You Sleep</div><h2>Nights by location</h2></div></div>
+  <div class="stay-bars" id="stayBars"></div>
+</section>
+
+<section id="packing">
+  <div class="section-head"><div><div class="eyebrow">Before You Go</div><h2>Packing checklist</h2><p>Tap to check off. This resets if you reload the page — it's a planning aid, not a saved list (use the JSON download above if you want it to stick around).</p></div></div>
+  <div class="pack-progress" id="packProgress"></div>
+  <div class="pack-grid" id="packGrid"></div>
+</section>
+
+<section id="calendar">
+  <div class="section-head"><div><div class="eyebrow">Take It With You</div><h2>Export to your calendar</h2></div></div>
+  <div class="cal-box">
+    <p>Download every flight and overnight stop as a single .ics file, ready to import into Google Calendar, Apple Calendar, or Outlook.</p>
+    <button class="btn btn-primary" onclick="exportICS()">Download itinerary.ics</button>
+  </div>
+</section>
+
+<footer>
+  South Island Grand Loop · Avis pickup at Christchurch Airport · Built as a trip planner, not a booking tool — confirm hut passes, cruise times, and openings directly before you travel. Your booked flights (Dec 11 outbound, Jan 3 return) are fixed and shown separately in the calendar export — check your edited plan still fits between them.
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// =====================================================================
+// PLACE LIBRARY — every selectable stop, pulled from both original
+// itinerary options plus the extra towns requested, each with real coordinates.
+// =====================================================================
+const places = {
+  "Christchurch":              {lat:-43.5320, lng:172.6306, tag:"Canterbury"},
+  "Dunedin":                    {lat:-45.8788, lng:170.5028, tag:"Otago"},
+  "Bluff":                      {lat:-46.6000, lng:168.3330, tag:"Southland"},
+  "Te Anau":                    {lat:-45.4131, lng:167.7181, tag:"Fiordland"},
+  "Kepler Track Hut":           {lat:-45.4600, lng:167.6400, tag:"Great Walk", hike:true},
+  "Manapōuri":                  {lat:-45.5670, lng:167.6070, tag:"Fiordland"},
+  "Queenstown":                  {lat:-45.0312, lng:168.6626, tag:"Queenstown"},
+  "Haast":                       {lat:-43.8810, lng:169.0490, tag:"West Coast"},
+  "Fox Glacier":                 {lat:-43.4640, lng:170.0120, tag:"West Coast"},
+  "Franz Josef":                 {lat:-43.3870, lng:170.1830, tag:"West Coast"},
+  "Greymouth":                   {lat:-42.4500, lng:171.2100, tag:"West Coast"},
+  "Hokitika":                    {lat:-42.7170, lng:170.9630, tag:"West Coast"},
+  "Westport":                    {lat:-41.7540, lng:171.6060, tag:"West Coast"},
+  "Murchison":                   {lat:-41.8020, lng:172.3270, tag:"Nelson region"},
+  "Mount Cook Village":          {lat:-43.7340, lng:170.0963, tag:"Mackenzie"},
+  "Twizel":                      {lat:-44.2630, lng:170.0980, tag:"Mackenzie"},
+  "Lake Tekapo":                 {lat:-44.0047, lng:170.4787, tag:"Mackenzie"},
+  "Akaroa":                      {lat:-43.8058, lng:172.9683, tag:"Banks Peninsula"},
+  "Hanmer Springs":              {lat:-42.5228, lng:172.8319, tag:"Canterbury"},
+  "Nelson":                      {lat:-41.2706, lng:173.2840, tag:"Nelson region"},
+  "Abel Tasman / Kaiteriteri":   {lat:-41.0227, lng:173.0212, tag:"Nelson region"},
+  "Blenheim":                    {lat:-41.5130, lng:173.9610, tag:"Marlborough"},
+  "Kaikōura":                    {lat:-42.4000, lng:173.6817, tag:"Kaikōura"},
+  "Depart for the USA":          {lat:-43.4894, lng:172.5320, tag:"Departure", noNight:true},
+};
+const placeNames = Object.keys(places);
+
+// Hand-plotted highway waypoints for the legs used in the original two options.
+// Keyed "From→To"; the reverse direction is looked up automatically.
+const townWaypoints = {
+  Christchurch:[-43.532,172.630], Ashburton:[-43.907,171.748], Timaru:[-44.397,171.253],
+  Oamaru:[-45.097,170.970], Palmerston:[-45.483,170.719], Dunedin:[-45.879,170.503],
+  Balclutha:[-46.234,169.746], Gore:[-46.101,168.945], Invercargill:[-46.413,168.354],
+  Bluff:[-46.600,168.333], Riverton:[-46.357,168.013], Tuatapere:[-46.140,167.685],
+  Clifden:[-46.007,167.699], Manapouri:[-45.567,167.607], TeAnau:[-45.413,167.718],
+  KeplerHut:[-45.460,167.640], Mossburn:[-45.658,168.234], FiveRivers:[-45.567,168.377],
+  Kingston:[-45.333,168.717], Queenstown:[-45.031,168.663], Cromwell:[-45.052,169.196],
+  Wanaka:[-44.703,169.132], Haast:[-43.881,169.049], FoxGlacier:[-43.464,170.012],
+  FranzJosef:[-43.387,170.183], Otira:[-42.891,171.539], ArthursPass:[-42.948,171.562],
+  Springfield:[-43.330,171.921], Geraldine:[-44.096,171.245], Fairlie:[-44.098,170.833],
+  Twizel:[-44.263,170.098], MountCook:[-43.734,170.096], Tekapo:[-44.005,170.479],
+  LittleRiver:[-43.766,172.735], Akaroa:[-43.806,172.968], Waipara:[-43.070,172.750],
+  Hanmer:[-42.523,172.832], Hokitika:[-42.717,170.963], Greymouth:[-42.450,171.210],
+  Westport:[-41.754,171.606], Murchison:[-41.802,172.327], Nelson:[-41.2706,173.2840],
+  Kaiteriteri:[-41.0227,173.0212], Blenheim:[-41.513,173.961], Kaikoura:[-42.400,173.6817],
+};
+function seg(...names){ return names.map(n=>townWaypoints[n]); }
+const roadSegments = {
+  "Christchurch→Dunedin": seg("Christchurch","Ashburton","Timaru","Oamaru","Palmerston","Dunedin"),
+  "Dunedin→Te Anau": seg("Dunedin","Balclutha","Gore","Invercargill","Bluff","Invercargill","Riverton","Tuatapere","Clifden","Manapouri","TeAnau"),
+  "Dunedin→Bluff": seg("Dunedin","Balclutha","Gore","Invercargill","Bluff"),
+  "Bluff→Te Anau": seg("Bluff","Invercargill","Riverton","Tuatapere","Clifden","Manapouri","TeAnau"),
+  "Te Anau→Kepler Track Hut": seg("TeAnau","KeplerHut"),
+  "Te Anau→Manapōuri": seg("TeAnau","Manapouri"),
+  "Manapōuri→Queenstown": seg("Manapouri","Mossburn","FiveRivers","Kingston","Queenstown"),
+  "Te Anau→Queenstown": seg("TeAnau","Manapouri","Mossburn","FiveRivers","Kingston","Queenstown"),
+  "Queenstown→Haast": seg("Queenstown","Cromwell","Wanaka","Haast"),
+  "Haast→Fox Glacier": seg("Haast","FoxGlacier"),
+  "Fox Glacier→Franz Josef": seg("FoxGlacier","FranzJosef"),
+  "Haast→Franz Josef": seg("Haast","FoxGlacier","FranzJosef"),
+  "Queenstown→Fox Glacier": seg("Queenstown","Cromwell","Wanaka","Haast","FoxGlacier"),
+  "Queenstown→Franz Josef": seg("Queenstown","Cromwell","Wanaka","Haast","FoxGlacier","FranzJosef"),
+  "Fox Glacier→Christchurch": seg("FoxGlacier","FranzJosef","Otira","ArthursPass","Springfield","Christchurch"),
+  "Franz Josef→Christchurch": seg("FranzJosef","Otira","ArthursPass","Springfield","Christchurch"),
+  "Christchurch→Mount Cook Village": seg("Christchurch","Ashburton","Geraldine","Fairlie","Twizel","MountCook"),
+  "Christchurch→Twizel": seg("Christchurch","Ashburton","Geraldine","Fairlie","Twizel"),
+  "Twizel→Mount Cook Village": seg("Twizel","MountCook"),
+  "Twizel→Lake Tekapo": seg("Twizel","Tekapo"),
+  "Mount Cook Village→Lake Tekapo": seg("MountCook","Twizel","Tekapo"),
+  "Lake Tekapo→Akaroa": seg("Tekapo","Fairlie","Geraldine","LittleRiver","Akaroa"),
+  "Akaroa→Christchurch": seg("Akaroa","LittleRiver","Christchurch"),
+  "Christchurch→Hanmer Springs": seg("Christchurch","Waipara","Hanmer"),
+  "Christchurch→Depart for the USA": seg("Christchurch","Christchurch"),
+  "Fox Glacier→Greymouth": seg("FoxGlacier","FranzJosef","Hokitika","Greymouth"),
+  "Franz Josef→Greymouth": seg("FranzJosef","Hokitika","Greymouth"),
+  "Greymouth→Westport": seg("Greymouth","Westport"),
+  "Westport→Nelson": seg("Westport","Murchison","Nelson"),
+  "Fox Glacier→Nelson": seg("FoxGlacier","FranzJosef","Hokitika","Greymouth","Westport","Murchison","Nelson"),
+  "Franz Josef→Nelson": seg("FranzJosef","Hokitika","Greymouth","Westport","Murchison","Nelson"),
+  "Nelson→Abel Tasman / Kaiteriteri": seg("Nelson","Kaiteriteri"),
+  "Nelson→Blenheim": seg("Nelson","Blenheim"),
+  "Blenheim→Kaikōura": seg("Blenheim","Kaikoura"),
+  "Nelson→Kaikōura": seg("Nelson","Blenheim","Kaikoura"),
+  "Abel Tasman / Kaiteriteri→Kaikōura": seg("Kaiteriteri","Nelson","Blenheim","Kaikoura"),
+  "Kaikōura→Akaroa": seg("Kaikoura","Christchurch","LittleRiver","Akaroa"),
+  "Kaikōura→Christchurch": seg("Kaikoura","Christchurch"),
+};
+function getSegment(a, b){
+  if(a===b) return null;
+  if(roadSegments[`${a}→${b}`]) return roadSegments[`${a}→${b}`];
+  if(roadSegments[`${b}→${a}`]) return roadSegments[`${b}→${a}`].slice().reverse();
+  return [ [places[a].lat,places[a].lng], [places[b].lat,places[b].lng] ]; // straight-line fallback
+}
+function isKnownSegment(a,b){
+  return !!(roadSegments[`${a}→${b}`] || roadSegments[`${b}→${a}`]);
+}
+
+function haversineKm(lat1,lng1,lat2,lng2){
+  const R=6371, toRad=d=>d*Math.PI/180;
+  const dLat=toRad(lat2-lat1), dLng=toRad(lng2-lng1);
+  const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function segmentDistanceKm(coords){
+  let d=0;
+  for(let i=0;i<coords.length-1;i++) d += haversineKm(coords[i][0],coords[i][1],coords[i+1][0],coords[i+1][1]);
+  return d;
+}
+
+// =====================================================================
+// SHARED DATA
+// =====================================================================
+const flights = [
+  {title:"UA 730 — San Francisco (SFO) → Christchurch (CHC)", start:"2026-12-11T23:25:00", end:"2026-12-13T10:35:00"},
+  {title:"UA 731 — Christchurch (CHC) → San Francisco (SFO)", start:"2027-01-03T14:15:00", end:"2027-01-03T06:15:00"},
+];
+
+const highlights = [
+  {title:"Fiordland", items:["Kepler Track Great Walk","Lake Te Anau","Optional Milford Sound"]},
+  {title:"Queenstown", items:["Adventure activities","Scenic viewpoints","Lake Wakatipu","Restaurants & wineries"]},
+  {title:"West Coast", items:["Haast Pass","Franz Josef Glacier","Fox Glacier","Rainforest landscapes"]},
+  {title:"Mackenzie Basin", items:["Aoraki/Mount Cook","Lake Tekapo","Stargazing"]},
+  {title:"Banks Peninsula", items:["Akaroa harbour","Hector's dolphins","Coastal scenery"]},
+  {title:"Nelson & Kaikōura", items:["Abel Tasman beaches & kayaking","Nelson arts scene","Whale watching"]},
+  {title:"Canterbury", items:["Hanmer Springs thermal pools","Christchurch gardens & attractions"]},
+];
+
+const packing = [
+  {cat:"Great Walk / Kepler Track", items:["Broken-in tramping boots","Rain jacket & waterproof pack liner","Thermal layers (alpine section is exposed)","Hut booking confirmation","Headlamp","Blister kit"]},
+  {cat:"Coastal & water days", items:["Swimsuit & quick-dry towel","Sandals for beaches / kayaking","Reef-safe sunscreen","Light rain shell for boat trips"]},
+  {cat:"Driving", items:["Driver's licence / IDP","Avis booking confirmation","Offline maps downloaded","Phone charger / power bank"]},
+  {cat:"General", items:["Passport & travel insurance","NZ power adapter","Daypack for day walks","Reusable water bottle","Warm layer for evenings"]},
+];
+
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+// =====================================================================
+// MASTER ROWS — one row per day, each with a separate day-stop and
+// night-stop, plus notes, hotel details, and a booked checkbox.
+// =====================================================================
+function defaultRows(){
+  return [
+    {day:"Christchurch", night:"Dunedin", notes:"Arrive 10:35am, clear customs, collect the Avis rental. Drive south via Oamaru's historic precinct and the Moeraki Boulders.", hotelNotes:"Family room Stable Stay Package Larnach Castle BBA26081621151436", hotelBooked:true},
+    {day:"Dunedin", night:"Te Anau", notes:"Southern Scenic Route via Bluff/Tiwai Point and Invercargill.", hotelNotes:"Te Anau Lodge 5646272148 Booking.com", hotelBooked:true},
+    {day:"Te Anau", night:"Te Anau", notes:"Recovery day. Optional Milford Sound cruise — book ahead.  Try out camping gear.\nQ.Manapōuri Power Station visit on the way out of Fiordland.", hotelNotes:"Te Anau Lodge 5646272148 Booking.com", hotelBooked:true},
+    {day:"Te Anau", night:"Kepler Track Hut", notes:"Kepler Track Day 1 — Te Anau control gates to Luxmore Hut.", hotelNotes:"Camp site booked via DOC.\n6425047.", hotelBooked:true},
+    {day:"Kepler Track Hut", night:"Kepler Track Hut", notes:"Kepler Track Day 2 — the exposed alpine ridge day.", hotelNotes:"Camp site booked via DOC.\n6425047.", hotelBooked:true},
+    {day:"Kepler Track Hut", night:"Te Anau", notes:"Kepler Track Day 3 — descend and finish the loop.", hotelNotes:"Booked back into Te Anau Lodge", hotelBooked:true},
+    {day:"Te Anau", night:"Queenstown", notes:"Manapōuri Power Station visit on the way out of Fiordland.", hotelNotes:"SHERWOOD QUEENSTOWN 78657141\n554-558 Frankton Rd, Queenstown, Aotearoa, New Zealand", hotelBooked:true},
+    {day:"Queenstown", night:"Queenstown", notes:"Open day — gondola, adventure activities, or the lakefront.", hotelNotes:"SHERWOOD QUEENSTOWN 78657141\n554-558 Frankton Rd, Queenstown, Aotearoa, New Zealand", hotelBooked:true},
+    {day:"Queenstown", night:"Queenstown", notes:"Second free day — Glenorchy, Arrowtown, or Gibbston wineries.", hotelNotes:"SHERWOOD QUEENSTOWN 78657141\n554-558 Frankton Rd, Queenstown, Aotearoa, New Zealand", hotelBooked:true},
+    {day:"Queenstown", night:"Queenstown", notes:"Third free day — Glenorchy, Arrowtown, or Gibbston wineries.", hotelNotes:"SHERWOOD QUEENSTOWN 78657141\n554-558 Frankton Rd, Queenstown, Aotearoa, New Zealand", hotelBooked:false},
+    {day:"Queenstown", night:"Franz Josef", notes:"Wanaka Over Haast Pass — one of the great alpine drives.", hotelNotes:"", hotelBooked:false},
+    {day:"Franz Josef", night:"Franz Josef", notes:"Glacier valley walk, Lake Matheson, or Hokitika Gorge.", hotelNotes:"", hotelBooked:false},
+    {day:"Franz Josef", night:"Christchurch", notes:"Over Arthur's Pass and the Southern Alps.", hotelNotes:"20 Jack Adamson Drive, 7901 Twizel, New Zealand", hotelBooked:true},
+    {day:"Christchurch", night:"Lake Tekapo", notes:"Via Lake Pukaki and the Mackenzie Basin.", hotelNotes:"20 Jack Adamson Drive, 7901 Twizel, New Zealand", hotelBooked:true},
+    {day:"Lake Tekapo", night:"Lake Tekapo", notes:"Hooker Valley Track and Tasman Glacier viewpoints first.", hotelNotes:"20 Jack Adamson Drive, 7901 Twizel, New Zealand", hotelBooked:true},
+    {day:"Lake Tekapo", night:"Akaroa", notes:"Over Banks Peninsula's crater rim roads.", hotelNotes:"20 Rue Balguerie, Akaroa 7520, New Zealand", hotelBooked:true},
+    {day:"Akaroa", night:"Akaroa", notes:"Harbour cruise, Hector's dolphins, or a coastal walk.", hotelNotes:"20 Rue Balguerie, Akaroa 7520, New Zealand", hotelBooked:true},
+    {day:"Akaroa", night:"Akaroa", notes:"No agenda day — kayaking, wineries, or the summit road.", hotelNotes:"20 Rue Balguerie, Akaroa 7520, New Zealand", hotelBooked:true},
+    {day:"Akaroa", night:"Christchurch", notes:"Back over the peninsula to Christchurch.  \nNew Year's Eve in the city.\nDrop Parents off at Airport.", hotelNotes:"NEED CHCH ACCOMODATION", hotelBooked:false},
+    {day:"Christchurch", night:"Christchurch", notes:"University Tour\nEasy pace — gardens, Avon punting, food precincts.", hotelNotes:"NEED CHCH ACCOMODATION", hotelBooked:false},
+    {day:"Hanmer Springs", night:"Christchurch", notes:"Day trip — thermal pools, back to Christchurch for the night.", hotelNotes:"NEED CHCH ACCOMODATION", hotelBooked:false},
+    {day:"Christchurch", night:"Christchurch", notes:"Drop the Avis rental at Christchurch Airport. UA731 to San Francisco, 2:15pm–6:15am.", hotelNotes:"Flying out no accommodation required.\n", hotelBooked:false},
+  ];
+}
+let rows = defaultRows();
+let tripStartDate = new Date(Date.UTC(2026,11,13)); // Dec 13, 2026
+
+// =====================================================================
+// DATE HELPERS
+// =====================================================================
+function addDays(date, n){ const d=new Date(date.getTime()); d.setUTCDate(d.getUTCDate()+n); return d; }
+function fmtShort(date){ return `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`; }
+function fmtISODate(date){ return date.toISOString().slice(0,10); }
+
+// =====================================================================
+// RECALCULATE — reads the DOM back into `rows`, then recomputes
+// dates, distances (km) and estimated drive times for every row.
+// Distance/time is calculated directly from that row's Day (the start
+// point) to its Night (where you sleep) — not from the previous row.
+// =====================================================================
+function syncRowsFromDOM(){
+  document.querySelectorAll('#tbody tr[data-row]').forEach((tr)=>{
+    const i = parseInt(tr.dataset.row);
+    if(!rows[i]) return;
+    rows[i].day = tr.querySelector('.row-day').value;
+    rows[i].night = tr.querySelector('.row-night').value;
+    rows[i].notes = tr.querySelector('.row-notes').value;
+    rows[i].hotelNotes = tr.querySelector('.row-hotelnotes').value;
+    rows[i].hotelBooked = tr.querySelector('.row-check').checked;
+  });
+}
+
+const AVG_SPEED_KMH = 70; // rough NZ rural/mountain-road average, for estimated drive time
+function legKm(a,b){
+  if(a===b) return {km:0, known:true};
+  const coords = getSegment(a,b);
+  return {km: segmentDistanceKm(coords), known: isKnownSegment(a,b)};
+}
+function recalculate(){
+  syncRowsFromDOM();
+  let cursor = new Date(tripStartDate.getTime());
+  rows.forEach((r, i)=>{
+    r.dateObj = new Date(cursor.getTime());
+    r.date = fmtShort(cursor);
+    cursor = addDays(cursor, 1);
+
+    const leg = legKm(r.day, r.night);
+    r.distanceKm = Math.round(leg.km/5)*5;
+    r.driveHrs = leg.km/AVG_SPEED_KMH;
+    r.knownRoad = leg.known;
+  });
+  renderAll();
+  setDataioStatus('Recalculated ✓');
+}
+
+function fmtHrs(h){
+  if(h<=0) return "Local";
+  const hrs = Math.floor(h), mins = Math.round((h-hrs)*60);
+  return mins ? `${hrs}h ${mins}m` : `${hrs}h`;
+}
+
+// =====================================================================
+// ROW ACTIONS
+// =====================================================================
+function addRow(){
+  syncRowsFromDOM();
+  const lastNight = rows.length ? rows[rows.length-1].night : placeNames[0];
+  rows.push({day:lastNight, night:lastNight, notes:"", hotelNotes:"", hotelBooked:false});
+  recalculate();
+}
+function insertRowAfter(i){
+  syncRowsFromDOM();
+  const place = rows[i].night;
+  rows.splice(i+1, 0, {day:place, night:place, notes:"", hotelNotes:"", hotelBooked:false});
+  recalculate();
+}
+function deleteRow(i){
+  syncRowsFromDOM();
+  if(rows.length<=1) return;
+  rows.splice(i,1);
+  recalculate();
+}
+function resetRows(){
+  rows = defaultRows();
+  tripStartDate = new Date(Date.UTC(2026,11,13));
+  recalculate();
+}
+
+// =====================================================================
+// MAP
+// =====================================================================
+const map = L.map('map', {scrollWheelZoom:false}).setView([-43.9, 169.8], 6);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'&copy; OpenStreetMap contributors', maxZoom:14
+}).addTo(map);
+let mapLayer = L.layerGroup().addTo(map);
+
+// Live road routing (OSRM). This is blocked inside Claude's artifact sandbox,
+// so it will silently fail there and fall back to the hand-plotted highway
+// segments below — but if you download this file and open it directly in a
+// normal browser (or host it somewhere), this fetch succeeds and draws the
+// actual turn-by-turn road geometry instead.
+const routeCache = {};
+async function fetchLiveRoute(a, b){
+  const cacheKey = `${a}|${b}`;
+  if(routeCache[cacheKey] !== undefined) return routeCache[cacheKey];
+  try{
+    const pa = places[a], pb = places[b];
+    const url = `https://router.project-osrm.org/route/v1/driving/${pa.lng},${pa.lat};${pb.lng},${pb.lat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('routing failed');
+    const data = await res.json();
+    if(!data.routes || !data.routes.length) throw new Error('no route');
+    const coords = data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+    routeCache[cacheKey] = coords;
+    return coords;
+  }catch(err){
+    routeCache[cacheKey] = null;
+    return null;
+  }
+}
+
+async function renderMap(){
+  mapLayer.clearLayers();
+  const bounds = [];
+  // Build the ordered sequence of stops actually visited: night(i-1) -> day(i) -> night(i)
+  const sequence = [];
+  rows.forEach((r,i)=>{
+    if(i===0) sequence.push(r.night);
+    else{
+      sequence.push(r.day);
+      sequence.push(r.night);
+    }
+  });
+  for(let i=1;i<sequence.length;i++){
+    const a=sequence[i-1], b=sequence[i];
+    if(a===b || !places[a] || !places[b]) continue;
+    const live = await fetchLiveRoute(a,b);
+    let coords, known;
+    if(live){ coords = live; known = true; }
+    else { coords = getSegment(a,b); known = isKnownSegment(a,b); }
+    L.polyline(coords, {color:'#3fa9a0', weight: known?3:2, opacity: known?0.85:0.55, dashArray: known?null:'2,7'}).addTo(mapLayer);
+    coords.forEach(c=>bounds.push(c));
+  }
+  const seen = new Set();
+  rows.forEach((r,i)=>{
+    [{place:r.night, label:`Night ${i+1}`}, ...(r.day!==r.night?[{place:r.day, label:`Day ${i+1}`}]:[])].forEach(({place,label})=>{
+      const p = places[place];
+      if(!p || seen.has(place)) return;
+      seen.add(place);
+      bounds.push([p.lat,p.lng]);
+      const icon = L.divIcon({
+        className:'',
+        html:`<div style="background:${p.hike?'#d4a73d':'#d9622b'};color:#0d2233;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:11px;width:24px;height:24px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.4);"><span style="transform:rotate(45deg)">${i+1}</span></div>`,
+        iconSize:[24,24], iconAnchor:[12,22]
+      });
+      L.marker([p.lat,p.lng], {icon}).addTo(mapLayer)
+        .bindPopup(`<b>Day ${i+1} — ${place}</b>${r.date?('<br>'+r.date):''}`);
+    });
+  });
+  if(bounds.length) map.fitBounds(L.latLngBounds(bounds), {padding:[24,24]});
+}
+
+// =====================================================================
+// RENDER
+// =====================================================================
+function renderHero(){
+  const withDates = rows.filter(r=>r.date);
+  const first = withDates[0], last = withDates[withDates.length-1];
+  document.getElementById('heroEyebrow').textContent = first && last
+    ? `${first.date} — ${last.date} · Aotearoa New Zealand` : 'Aotearoa New Zealand';
+  const totalKm = rows.reduce((s,r)=>s+(r.distanceKm||0),0);
+  const nights = rows.filter(r=>!(places[r.night]&&places[r.night].noNight)).length;
+  const hikeDays = rows.filter(r=>places[r.night]&&places[r.night].hike).length;
+  document.getElementById('tripmeter').innerHTML = `
+    <div class="tm-stat"><span class="tm-num">${rows.length}</span><span class="tm-label">Days on the loop</span></div>
+    <div class="tm-stat"><span class="tm-num">${nights}</span><span class="tm-label">Nights</span></div>
+    <div class="tm-stat"><span class="tm-num">${hikeDays}</span><span class="tm-label">Days on the Kepler Track</span></div>
+    <div class="tm-stat"><span class="tm-num">${totalKm.toLocaleString()} km</span><span class="tm-label">Total driving (est.)</span></div>
+  `;
+}
+
+function placeOptionsHTML(selected){
+  return placeNames.map(n=>`<option value="${n}" ${n===selected?'selected':''}>${n}</option>`).join('');
+}
+
+function renderTable(){
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = rows.map((r,i)=>{
+    const np = places[r.night] || {};
+    const rowClasses = [np.hike ? 'hike-row':'', np.noNight ? 'nonight-row':''].join(' ').trim();
+    const distLabel = `${r.distanceKm||0} km${r.knownRoad===false?'*':''}`;
+    const timeLabel = fmtHrs(r.driveHrs||0);
+    return `
+      <tr class="${rowClasses}" data-row="${i}">
+        <td class="row-n">${i+1}</td>
+        <td class="row-date">${r.date||''}</td>
+        <td class="col-day"><select class="row-select row-day" onchange="recalculate()">${placeOptionsHTML(r.day)}</select></td>
+        <td class="col-night"><select class="row-select row-night" onchange="recalculate()">${placeOptionsHTML(r.night)}</select></td>
+        <td class="row-dist">${distLabel}</td>
+        <td class="row-time">${timeLabel}</td>
+        <td class="col-notes"><textarea class="row-notes" rows="3" placeholder="Plans, reminders, activity notes…" oninput="rows[${i}].notes=this.value">${(r.notes||'').replace(/</g,'&lt;')}</textarea></td>
+        <td class="col-hotelnotes">
+          <textarea class="row-notes row-hotelnotes" rows="3" placeholder="Hotel name, confirmation #, check-in time…" oninput="rows[${i}].hotelNotes=this.value">${(r.hotelNotes||'').replace(/</g,'&lt;')}</textarea>
+          <div class="need-booking" id="needbook-${i}" style="display:${r.hotelBooked?'none':'block'}">NEED BOOKING</div>
+        </td>
+        <td style="text-align:center;"><input type="checkbox" class="row-check" ${r.hotelBooked?'checked':''} onchange="rows[${i}].hotelBooked=this.checked; document.getElementById('needbook-${i}').style.display=this.checked?'none':'block';"></td>
+        <td class="row-actions">
+          <button title="Insert day after" onclick="insertRowAfter(${i})">+</button>
+          <button title="Delete day" class="del" onclick="deleteRow(${i})">×</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  const anyUnknown = rows.some((r)=> r.knownRoad===false);
+  if(anyUnknown){
+    tbody.innerHTML += `<tr><td colspan="10" style="color:var(--ice-dim);font-size:11.5px;padding-top:4px;">* straight-line estimate somewhere in that leg — no plotted highway for one of the pairs</td></tr>`;
+  }
+}
+
+function renderHighlights(){
+  document.getElementById('hlGrid').innerHTML = highlights.map(h=>`
+    <div class="hl-card"><h3>${h.title}</h3><ul>${h.items.map(i=>`<li>${i}</li>`).join('')}</ul></div>
+  `).join('');
+}
+
+function renderOvernights(){
+  const combined = [];
+  const index = {};
+  rows.forEach(r=>{
+    const p = places[r.night];
+    if(p && p.noNight) return;
+    if(index[r.night]===undefined){ index[r.night]=combined.length; combined.push({loc:r.night, n:1}); }
+    else combined[index[r.night]].n += 1;
+  });
+  const maxN = Math.max(1, ...combined.map(o=>o.n));
+  document.getElementById('stayBars').innerHTML = combined.map(o=>`
+    <div class="stay-bar-row">
+      <div class="stay-bar-label">${o.loc}</div>
+      <div class="stay-bar-track"><div class="stay-bar-fill" style="width:${(o.n/maxN*100).toFixed(0)}%"></div></div>
+      <div class="stay-bar-n">${o.n}n</div>
+    </div>
+  `).join('');
+}
+
+function renderAll(){
+  renderHero();
+  renderTable();
+  renderMap();
+  renderHighlights();
+  renderOvernights();
+}
+
+// ---------------- PACKING ----------------
+let checkedCount=0, totalItems=0, packingBuilt=false;
+function renderPacking(){
+  if(packingBuilt) return;
+  packingBuilt = true;
+  const packGrid = document.getElementById('packGrid');
+  packing.forEach((cat,ci)=>{
+    const div = document.createElement('div');
+    div.className='pack-cat';
+    div.innerHTML = `<h4>${cat.cat}</h4>` + cat.items.map((item,ii)=>{
+      totalItems++;
+      return `<label id="lbl-${ci}-${ii}"><input type="checkbox" onchange="togglePack(${ci},${ii})"> ${item}</label>`;
+    }).join('');
+    packGrid.appendChild(div);
+  });
+  updatePackProgress();
+}
+function togglePack(ci,ii){
+  const lbl=document.getElementById(`lbl-${ci}-${ii}`);
+  const cb=lbl.querySelector('input');
+  lbl.classList.toggle('checked', cb.checked);
+  checkedCount += cb.checked?1:-1;
+  updatePackProgress();
+}
+function updatePackProgress(){
+  document.getElementById('packProgress').textContent = `${checkedCount} / ${totalItems} packed`;
+}
+
+// ---------------- ICS EXPORT ----------------
+function pad(n){ return n.toString().padStart(2,'0'); }
+function toICSDateTimeFixed(dstr){
+  const d = new Date(dstr);
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+}
+function exportICS(){
+  syncRowsFromDOM();
+  let ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//South Island Grand Loop//EN\r\n";
+  flights.forEach(f=>{
+    ics += "BEGIN:VEVENT\r\n";
+    ics += `SUMMARY:${f.title}\r\n`;
+    ics += `DTSTART:${toICSDateTimeFixed(f.start)}\r\n`;
+    ics += `DTEND:${toICSDateTimeFixed(f.end)}\r\n`;
+    ics += `UID:${Math.random().toString(36).slice(2)}@nzloop\r\n`;
+    ics += "END:VEVENT\r\n";
+  });
+  rows.forEach((r,i)=>{
+    if(!r.dateObj) return;
+    const p = places[r.night];
+    if(p && p.noNight) return;
+    const nextDay = addDays(r.dateObj,1);
+    const fmt = x=>`${x.getUTCFullYear()}${pad(x.getUTCMonth()+1)}${pad(x.getUTCDate())}`;
+    const summary = r.day===r.night ? r.night : `${r.day} → ${r.night}`;
+    const descParts = [r.notes, r.hotelNotes ? `Hotel: ${r.hotelNotes}` : ''].filter(Boolean).join(' — ');
+    ics += "BEGIN:VEVENT\r\n";
+    ics += `SUMMARY:Day ${i+1}: ${summary}\r\n`;
+    if(descParts) ics += `DESCRIPTION:${descParts.replace(/,/g,'\\,')}\r\n`;
+    ics += `DTSTART;VALUE=DATE:${fmt(r.dateObj)}\r\n`;
+    ics += `DTEND;VALUE=DATE:${fmt(nextDay)}\r\n`;
+    ics += `LOCATION:${r.night}\r\n`;
+    ics += `UID:day${i+1}@nzloop\r\n`;
+    ics += "END:VEVENT\r\n";
+  });
+  ics += "END:VCALENDAR\r\n";
+  const blob = new Blob([ics], {type:'text/calendar'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'south-island-grand-loop.ics';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// ---------------- JSON EXPORT / IMPORT ----------------
+function exportJSON(){
+  syncRowsFromDOM();
+  const state = {
+    version:3,
+    tripStartDate: fmtISODate(tripStartDate),
+    rows: rows.map(r=>({day:r.day, night:r.night, notes:r.notes, hotelNotes:r.hotelNotes, hotelBooked:r.hotelBooked})),
+  };
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'south-island-trip-data.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setDataioStatus('Downloaded ✓');
+}
+// Maps older/renamed place names to their current equivalent, so older
+// downloaded JSON files keep working after the place list changes.
+const legacyPlaceMap = {
+  "Franz Josef / Fox Glacier": "Franz Josef",
+};
+function resolvePlace(name){
+  if(placeNames.includes(name)) return name;
+  if(legacyPlaceMap[name]) return legacyPlaceMap[name];
+  return placeNames[0];
+}
+function importJSONFile(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const state = JSON.parse(e.target.result);
+      if(state.tripStartDate){
+        const [y,m,dd] = state.tripStartDate.split('-').map(Number);
+        tripStartDate = new Date(Date.UTC(y,m-1,dd));
+      }
+      if(Array.isArray(state.rows) && state.rows.length){
+        rows = state.rows.map(r=>({
+          day: resolvePlace(r.day),
+          night: resolvePlace(r.night),
+          notes: r.notes||'', hotelNotes: r.hotelNotes||'', hotelBooked: !!r.hotelBooked,
+        }));
+      }
+      recalculate();
+      setDataioStatus('Loaded ✓');
+    }catch(err){
+      setDataioStatus('Could not read that file — is it a trip data .json?');
+    }
+  };
+  reader.readAsText(file);
+}
+function setDataioStatus(msg){
+  const el = document.getElementById('dataioStatus');
+  el.textContent = msg;
+  setTimeout(()=>{ if(el.textContent===msg) el.textContent=''; }, 4000);
+}
+
+// ---------------- WIRING ----------------
+function handleStartDateChange(e){
+  if(!e.target.value) return;
+  const [y,m,dd] = e.target.value.split('-').map(Number);
+  tripStartDate = new Date(Date.UTC(y,m-1,dd));
+  recalculate();
+}
+document.getElementById('startDateInput').addEventListener('input', handleStartDateChange);
+document.getElementById('startDateInput').addEventListener('change', handleStartDateChange);
+document.getElementById('importFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(file) importJSONFile(file);
+  e.target.value = '';
+});
+
+// ---------------- INITIAL RENDER ----------------
+document.getElementById('startDateInput').value = fmtISODate(tripStartDate);
+recalculate();
+renderPacking();
+</script>
+</body>
+</html>
