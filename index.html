@@ -113,6 +113,9 @@
   }
   .ctrl-actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
   .dataio-status{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--gold);}
+  .sync-status{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ice-dim); padding:4px 10px; border:1px solid var(--line); border-radius:999px;}
+  .sync-status.ok{color:var(--teal); border-color:var(--teal-dim);}
+  .sync-status.warn{color:#ff8a5c; border-color:#ff8a5c;}
 
   /* ---------- MAP ---------- */
   #map{width:100%; height:420px; border-radius:var(--radius); border:1px solid var(--line); filter:saturate(0.9);}
@@ -147,7 +150,8 @@
   .row-notes::placeholder{color:var(--ice-dim);}
   .public-notes{color:var(--ice-dim); font-size:12.5px; line-height:1.5; padding:4px 0; max-width:340px;}
   .row-check{width:17px; height:17px; accent-color:var(--teal); cursor:pointer; margin-top:20px;}
-  .col-day, .col-night{min-width:140px;}
+  .col-day, .col-night, .col-via{min-width:140px;}
+  .row-via-empty{color:var(--ice-dim);}
   .col-notes, .col-hotelnotes{min-width:280px;}
   .need-booking{color:#ff5c5c; font-weight:700; font-size:11.5px; letter-spacing:.03em; margin-top:6px;}
   .row-actions{display:flex; gap:4px; white-space:nowrap; padding-top:18px;}
@@ -228,11 +232,12 @@
     <div class="ctrl-actions">
       <button class="btn btn-primary" onclick="recalculate()">↻ Recalculate</button>
       <button class="btn" onclick="addRow()">+ Add day</button>
-      <button class="btn btn-ghost" onclick="resetRows()">Reset to original</button>
+      <button class="btn btn-ghost" onclick="confirmReset(this)">Reset to original</button>
       <button class="btn" onclick="exportJSON()">⬇ Download (.json)</button>
       <label class="btn" for="importFile">⬆ Upload (.json)</label>
       <input type="file" id="importFile" accept="application/json" style="display:none">
       <span class="dataio-status" id="dataioStatus"></span>
+      <span class="sync-status" id="syncStatus" hidden></span>
     </div>
   </div>
 </section>
@@ -242,19 +247,19 @@
     <div>
       <div class="eyebrow">Day by Day</div>
       <h2>Editable itinerary</h2>
-      <p id="itinDescText">Each row is a day, with a start point and an overnight stop — distance and drive time are calculated directly between the two. Pick from the dropdowns, add notes and hotel details, tick off bookings, then hit Recalculate.</p>
+      <p id="itinDescText">Each row is a day: where you start, an optional stop you go via, and where you sleep. Distance and drive time are real road figures for that route (OpenStreetMap routing, free-flowing traffic, no stops). Pick from the dropdowns, add notes and hotel details, tick off bookings, then hit Recalculate.</p>
     </div>
   </div>
   <div class="table-wrap">
     <table class="itin">
       <thead>
         <tr id="theadFull">
-          <th>#</th><th>Date</th><th class="col-day">Start (day)</th><th class="col-night">Overnight (night)</th>
-          <th>Distance</th><th>Drive time</th><th class="col-notes">Notes</th><th class="col-hotelnotes">Hotel details</th><th>Booked</th><th>Paid</th><th></th>
+          <th>#</th><th>Date</th><th class="col-day">Start (day)</th><th class="col-via">Via</th><th class="col-night">Overnight (night)</th>
+          <th>Distance</th><th>Drive time</th><th class="col-notes">Notes</th><th class="col-hotelnotes">Hotel details</th><th>Booked</th><th>Hotel paid</th><th>Event booked</th><th></th>
         </tr>
         <tr id="theadPublic" style="display:none;">
-          <th>#</th><th>Date</th><th class="col-day">Start (day)</th><th class="col-night">Overnight (night)</th>
-          <th>Distance</th><th>Drive time</th><th class="col-notes">Notes</th><th>Booked</th><th>Paid</th>
+          <th>#</th><th>Date</th><th class="col-day">Start (day)</th><th class="col-via">Via</th><th class="col-night">Overnight (night)</th>
+          <th>Distance</th><th>Drive time</th><th class="col-notes">Notes</th><th>Booked</th><th>Hotel paid</th><th>Event booked</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
@@ -562,10 +567,12 @@ function recalcBudgetTotals(){
 function addBudgetItem(cat){
   budget[cat].push({detail:"", nzd:"", usd:""});
   renderBudget();
+  scheduleSave();
 }
 function deleteBudgetItem(cat, i){
   budget[cat].splice(i,1);
   renderBudget();
+  scheduleSave();
 }
 
 // =====================================================================
@@ -585,28 +592,28 @@ function showTab(name){
 // =====================================================================
 function defaultRows(){
   return [
-    {day:"Christchurch", night:"Dunedin", notes:"Arrive 10:35am, clear customs, collect the Avis rental. Drive south via Oamaru's historic precinct and the Moeraki Boulders.", hotelNotes:"", hotelBooked:true, paid:true},
-    {day:"Dunedin", night:"Te Anau", notes:"Southern Scenic Route via Bluff/Tiwai Point and Invercargill.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Te Anau", night:"Te Anau", notes:"Recovery day. Optional Milford Sound cruise — book ahead.  Try out camping gear.\nQ.Manapōuri Power Station visit on the way out of Fiordland.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Te Anau", night:"Kepler Track Hut", notes:"Kepler Track Day 1 — Te Anau control gates to Luxmore Hut.", hotelNotes:"", hotelBooked:true, paid:true},
-    {day:"Kepler Track Hut", night:"Kepler Track Hut", notes:"Kepler Track Day 2 — the exposed alpine ridge day.", hotelNotes:"", hotelBooked:true, paid:true},
-    {day:"Kepler Track Hut", night:"Te Anau", notes:"Kepler Track Day 3 — descend and finish the loop.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Te Anau", night:"Queenstown", notes:"Manapōuri Power Station visit on the way out of Fiordland.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Queenstown", night:"Queenstown", notes:"Open day — gondola, adventure activities, or the lakefront.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Queenstown", night:"Queenstown", notes:"Second free day — Glenorchy, Arrowtown, or Gibbston wineries.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Queenstown", night:"Queenstown", notes:"Third free day — Glenorchy, Arrowtown, or Gibbston wineries.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Queenstown", night:"Franz Josef", notes:"Wanaka Over Haast Pass — one of the great alpine drives.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Franz Josef", night:"Franz Josef", notes:"Glacier valley walk, Lake Matheson, or Hokitika Gorge.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Franz Josef", night:"Christchurch", notes:"Over Arthur's Pass and the Southern Alps.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Christchurch", night:"Twizel", notes:"Via Lake Pukaki and the Mackenzie Basin.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Twizel", night:"Twizel", notes:"Hooker Valley Track and Tasman Glacier viewpoints first.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Twizel", night:"Akaroa", notes:"Over Banks Peninsula's crater rim roads.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Akaroa", night:"Akaroa", notes:"Harbour cruise, Hector's dolphins, or a coastal walk.", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Akaroa", night:"Akaroa", notes:"Fishing Trips Wednesday, 30 December 2026 @ 8:00am - 12:00pm Fishing 2 Adults, 2 Children", hotelNotes:"", hotelBooked:true, paid:false},
-    {day:"Akaroa", night:"Christchurch", notes:"Back over the peninsula to Christchurch.  \nNew Year's Eve in the city.\nDrop Parents off at Airport.", hotelNotes:"", hotelBooked:true, paid:true},
-    {day:"Christchurch", night:"Christchurch", notes:"University Tour\nEasy pace — gardens, Avon punting, food precincts.", hotelNotes:"", hotelBooked:true, paid:true},
-    {day:"Hanmer Springs", night:"Christchurch", notes:"Day trip — thermal pools, back to Christchurch for the night.", hotelNotes:"", hotelBooked:true, paid:true},
-    {day:"Christchurch", night:"Christchurch", notes:"Drop the Avis rental at Christchurch Airport. UA731 to San Francisco, 2:15pm–6:15am.", hotelNotes:"", hotelBooked:true, paid:true},
+    {day:"Christchurch", night:"Dunedin", via:"", notes:"Arrive 10:35am, clear customs, collect the Avis rental. Drive south via Oamaru's historic precinct and the Moeraki Boulders.", hotelNotes:"", hotelBooked:true, paid:true, eventBooked:"na"},
+    {day:"Dunedin", night:"Te Anau", via:"Bluff", notes:"Southern Scenic Route via Bluff/Tiwai Point and Invercargill.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Te Anau", night:"Te Anau", via:"", notes:"Recovery day. Optional Milford Sound cruise — book ahead.  Try out camping gear.\nQ.Manapōuri Power Station visit on the way out of Fiordland.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Te Anau", night:"Kepler Track Hut", via:"", notes:"Kepler Track Day 1 — Te Anau control gates to Luxmore Hut.", hotelNotes:"", hotelBooked:true, paid:true, eventBooked:"na"},
+    {day:"Kepler Track Hut", night:"Kepler Track Hut", via:"", notes:"Kepler Track Day 2 — the exposed alpine ridge day.", hotelNotes:"", hotelBooked:true, paid:true, eventBooked:"na"},
+    {day:"Kepler Track Hut", night:"Te Anau", via:"", notes:"Kepler Track Day 3 — descend and finish the loop.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Te Anau", night:"Queenstown", via:"", notes:"Manapōuri Power Station visit on the way out of Fiordland.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Queenstown", night:"Queenstown", via:"", notes:"Open day — gondola, adventure activities, or the lakefront.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Queenstown", night:"Queenstown", via:"", notes:"Second free day — Glenorchy, Arrowtown, or Gibbston wineries.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Queenstown", night:"Queenstown", via:"", notes:"Third free day — Glenorchy, Arrowtown, or Gibbston wineries.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Queenstown", night:"Franz Josef", via:"", notes:"Wanaka Over Haast Pass — one of the great alpine drives.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Franz Josef", night:"Franz Josef", via:"", notes:"Glacier valley walk, Lake Matheson, or Hokitika Gorge.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Franz Josef", night:"Twizel", via:"Christchurch", notes:"Over Arthur's Pass and the Southern Alps.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Twizel", night:"Twizel", via:"", notes:"Via Lake Pukaki and the Mackenzie Basin.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Twizel", night:"Twizel", via:"", notes:"Hooker Valley Track and Tasman Glacier viewpoints first.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Twizel", night:"Akaroa", via:"", notes:"Over Banks Peninsula's crater rim roads.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Akaroa", night:"Akaroa", via:"", notes:"Harbour cruise, Hector's dolphins, or a coastal walk.", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Akaroa", night:"Akaroa", via:"", notes:"Fishing Trips Wednesday, 30 December 2026 @ 8:00am - 12:00pm Fishing 2 Adults, 2 Children", hotelNotes:"", hotelBooked:true, paid:false, eventBooked:"na"},
+    {day:"Akaroa", night:"Christchurch", via:"", notes:"Back over the peninsula to Christchurch.  \nNew Year's Eve in the city.\nDrop Parents off at Airport.", hotelNotes:"", hotelBooked:true, paid:true, eventBooked:"na"},
+    {day:"Christchurch", night:"Christchurch", via:"", notes:"University Tour\nEasy pace — gardens, Avon punting, food precincts.", hotelNotes:"", hotelBooked:true, paid:true, eventBooked:"na"},
+    {day:"Christchurch", night:"Christchurch", via:"Hanmer Springs", notes:"Day trip — thermal pools, back to Christchurch for the night.", hotelNotes:"", hotelBooked:true, paid:true, eventBooked:"na"},
+    {day:"Christchurch", night:"Christchurch", via:"", notes:"Drop the Avis rental at Christchurch Airport. UA731 to San Francisco, 2:15pm–6:15am.", hotelNotes:"", hotelBooked:true, paid:true, eventBooked:"na"},
   ];
 }
 let rows = defaultRows();
@@ -631,19 +638,34 @@ function syncRowsFromDOM(){
     if(!rows[i]) return;
     rows[i].day = tr.querySelector('.row-day').value;
     rows[i].night = tr.querySelector('.row-night').value;
+    rows[i].via = tr.querySelector('.row-via').value;
     rows[i].notes = tr.querySelector('.row-notes').value;
     rows[i].hotelNotes = tr.querySelector('.row-hotelnotes').value;
     rows[i].hotelBooked = tr.querySelector('.row-check').checked;
     rows[i].paid = tr.querySelector('.row-check-paid').checked;
+    rows[i].eventBooked = tr.querySelector('.row-event').value;
   });
 }
 
-const AVG_SPEED_KMH = 70; // rough NZ rural/mountain-road average, for estimated drive time
-function legKm(a,b){
-  if(a===b) return {km:0, known:true};
-  const coords = getSegment(a,b);
-  return {km: segmentDistanceKm(coords), known: isKnownSegment(a,b)};
+const AVG_SPEED_KMH = 70; // only used for pairs missing from DRIVE_TABLE below
+// =====================================================================
+// DRIVE_TABLE — real road distances (km) and drive times (minutes) for
+// every pair of places, from OSRM (OpenStreetMap routing, car profile,
+// free-flowing traffic), fetched Nov 2026. km[i][j] is FROM names[i] TO
+// names[j]. Pairs not in here (e.g. a newly added place) fall back to the
+// hand-plotted highway estimate and are marked * in the table.
+// =====================================================================
+const DRIVE_TABLE = {"names": ["Christchurch", "Dunedin", "Bluff", "Te Anau", "Kepler Track Hut", "Manapōuri", "Queenstown", "Haast", "Fox Glacier", "Franz Josef", "Greymouth", "Hokitika", "Westport", "Murchison", "Mount Cook Village", "Twizel", "Lake Tekapo", "Akaroa", "Hanmer Springs", "Nelson", "Abel Tasman / Kaiteriteri", "Blenheim", "Kaikōura", "Depart for the USA"], "km": [[0, 361, 589.6, 640.6, 644.5, 641.6, 481.9, 554.2, 403.6, 379.9, 242.3, 246.4, 331.6, 290.5, 330.2, 284.1, 226.5, 80.1, 133.8, 415.1, 433.6, 309.9, 180.4, 10.7], [359.7, 0, 229, 289.9, 293.8, 290.9, 276, 402, 523.1, 546.2, 520.1, 524.2, 620.5, 644.8, 321, 256.8, 287.6, 417.1, 488.2, 769.5, 787.9, 664.3, 534.8, 354.6], [588.5, 228.8, 0, 184.3, 188.1, 185.3, 213.3, 407.3, 528.4, 551.5, 724.2, 685.2, 824.6, 873.7, 456.8, 392.7, 450.1, 646, 717, 998.4, 1016.8, 893.2, 763.6, 583.5], [639.9, 290, 184.7, 0, 6.4, 22.3, 171.5, 365.5, 486.6, 509.7, 682.4, 643.4, 782.9, 843.1, 421.9, 357.7, 415.1, 697.3, 768.3, 967.8, 986.2, 944.5, 815, 634.8], [643.5, 293.6, 188.3, 6.1, 0, 21.3, 175.1, 369.2, 490.3, 513.3, 686.1, 647, 786.5, 846.7, 425.5, 361.3, 418.7, 701, 772, 971.4, 989.8, 948.1, 818.6, 638.4], [640.6, 290.7, 185.4, 22, 21.3, 0, 172.3, 366.3, 487.4, 510.5, 683.2, 644.1, 783.6, 843.9, 422.6, 358.5, 415.8, 698.1, 769.1, 968.5, 987, 945.2, 815.7, 635.6], [480.9, 274.8, 213.3, 171.3, 175.2, 172.3, 0, 206.6, 327.7, 350.7, 523.5, 484.4, 623.9, 684.1, 262.9, 198.7, 256.1, 538.4, 609.4, 808.8, 827.3, 785.5, 656, 475.9], [553.2, 400.8, 407.3, 365.3, 369.1, 366.3, 206.6, 0, 121.5, 144.5, 317.3, 278.2, 417.7, 477.9, 335.2, 271.1, 328.4, 610.7, 531, 602.6, 621, 640.7, 640.6, 516], [404.5, 521.9, 528.4, 486.4, 490.3, 487.4, 327.7, 121.5, 0, 24, 196.7, 157.7, 297.2, 357.4, 456.3, 392.2, 449.5, 468.8, 410.4, 482.1, 500.5, 520.2, 520.1, 395.5], [380.8, 544.9, 551.5, 509.5, 513.3, 510.4, 350.8, 144.5, 24, 0, 173, 134, 273.5, 333.7, 479.4, 415.2, 472.6, 445.1, 386.7, 458.4, 476.8, 496.5, 496.4, 371.8], [243, 520.3, 724.1, 682.1, 686, 683.1, 523.5, 317.2, 196.7, 173, 0, 39.5, 101, 161.2, 476.6, 430.6, 373, 307.3, 214.2, 285.9, 304.3, 324, 323.9, 234], [247.3, 524.6, 685.2, 643.2, 647, 644.1, 484.5, 278.2, 157.7, 134, 39.5, 0, 140, 200.2, 481, 434.9, 377.3, 311.6, 253.2, 324.9, 343.3, 363, 362.9, 238.3], [331.5, 620.8, 824.7, 782.7, 786.5, 783.7, 624, 417.8, 297.2, 273.5, 100.9, 140, 0, 97.6, 577.2, 531.1, 473.5, 407.9, 217, 222.3, 240.7, 260.4, 326.7, 331.8], [290.4, 645.3, 873.9, 842.9, 846.7, 843.9, 684.2, 478, 357.4, 333.7, 161.1, 200.2, 97.7, 0, 615.3, 569.3, 511.6, 372.7, 175.9, 125, 143.5, 163.2, 285.6, 290.7], [329.1, 321.3, 456.9, 421.6, 425.4, 422.6, 262.9, 335.2, 456.3, 479.4, 476.8, 480.9, 577.2, 615.3, 0, 65.1, 104.3, 386.6, 457.6, 740, 758.5, 633.8, 504.2, 324.1], [283.1, 257.2, 392.7, 357.4, 361.3, 358.4, 198.7, 271, 392.2, 415.2, 430.7, 434.9, 531.2, 569.3, 65.1, 0, 58.3, 340.5, 411.6, 694, 712.4, 587.7, 458.2, 278], [224.9, 287.4, 450.4, 415.1, 418.9, 416, 256.4, 328.7, 449.8, 472.8, 372.6, 376.7, 473, 511.2, 104.6, 58.5, 0, 282.4, 353.4, 635.8, 654.3, 529.6, 400, 219.9], [79.2, 417.5, 646, 697.1, 700.9, 698, 538.4, 610.7, 468.8, 445.1, 307.5, 311.6, 407.9, 372.5, 386.6, 340.6, 282.9, 0, 215.9, 497.2, 515.6, 392, 262.5, 84.8], [133.9, 488.9, 717.4, 768.5, 772.3, 769.5, 609.8, 531.2, 410.7, 387, 214.4, 253.5, 217.2, 176.1, 458, 412, 354.3, 216.3, 0, 300.8, 319.2, 253.6, 129.1, 134.3], [415, 770, 998.5, 967.6, 971.4, 968.5, 808.9, 602.6, 482.1, 458.4, 285.8, 324.9, 222.3, 125, 740, 693.9, 636.3, 497.4, 300.6, 0, 65.8, 114.9, 243, 415.4], [433.5, 788.4, 1017, 986, 989.8, 987, 827.3, 621.1, 500.5, 476.8, 304.2, 343.3, 240.8, 143.4, 758.4, 712.4, 654.7, 515.8, 319, 65.8, 0, 180.3, 308.5, 433.8], [309.8, 664.8, 893.3, 944.4, 948.2, 945.4, 785.7, 640.8, 520.2, 496.6, 324, 363.1, 260.5, 163.2, 633.9, 587.9, 530.2, 392.2, 253.4, 114.9, 180.5, 0, 128.2, 310.2], [180.3, 535.3, 763.8, 814.9, 818.7, 815.8, 656.2, 640.7, 520.1, 496.5, 323.9, 363, 326.7, 285.6, 504.4, 458.4, 400.7, 262.7, 128.9, 243, 308.6, 128.2, 0, 180.7], [10.8, 354.9, 583.4, 634.4, 638.3, 635.4, 475.8, 515.9, 395.3, 371.7, 234, 238.2, 333.2, 292.1, 324, 277.9, 220.3, 88, 135.4, 416.7, 435.2, 311.5, 182, 0]], "min": [[0, 307, 495, 504, 508, 504, 384, 434, 336, 311, 206, 207, 273, 237, 264, 229, 186, 84, 116, 344, 361, 261, 158, 20], [303, 0, 189, 235, 239, 235, 227, 318, 411, 435, 428, 428, 509, 534, 259, 210, 235, 359, 412, 640, 658, 558, 454, 303], [492, 189, 0, 150, 155, 151, 176, 339, 432, 457, 595, 561, 676, 723, 359, 310, 354, 548, 601, 829, 847, 747, 643, 492], [501, 235, 151, 0, 9, 20, 136, 300, 393, 417, 556, 521, 636, 683, 326, 277, 321, 557, 610, 790, 808, 756, 652, 501], [505, 239, 155, 8, 0, 18, 140, 304, 397, 421, 560, 525, 640, 687, 330, 281, 325, 561, 614, 794, 812, 760, 656, 505], [501, 235, 150, 20, 18, 0, 136, 299, 392, 417, 555, 521, 636, 683, 325, 276, 321, 557, 610, 790, 807, 755, 652, 501], [381, 226, 176, 136, 140, 136, 0, 179, 272, 297, 435, 401, 516, 563, 205, 156, 200, 436, 490, 669, 687, 635, 532, 380], [432, 318, 339, 299, 304, 299, 179, 0, 94, 119, 257, 223, 338, 385, 256, 207, 251, 487, 428, 492, 509, 523, 514, 416], [333, 411, 432, 392, 396, 392, 272, 94, 0, 26, 165, 130, 246, 293, 349, 300, 344, 391, 336, 399, 417, 430, 421, 323], [308, 435, 457, 417, 421, 417, 297, 119, 26, 0, 139, 105, 220, 267, 374, 325, 369, 366, 310, 374, 391, 404, 396, 298], [203, 428, 595, 555, 559, 555, 435, 257, 165, 139, 0, 35, 83, 130, 377, 342, 299, 261, 173, 236, 254, 267, 258, 193], [204, 428, 561, 521, 525, 521, 401, 223, 130, 105, 35, 0, 116, 163, 378, 343, 299, 262, 206, 270, 287, 300, 292, 194], [273, 509, 676, 636, 640, 636, 516, 338, 246, 220, 83, 116, 0, 81, 458, 423, 380, 342, 176, 187, 205, 218, 261, 274], [237, 535, 723, 683, 687, 683, 563, 385, 292, 267, 129, 163, 81, 0, 483, 448, 404, 316, 140, 108, 125, 138, 225, 238], [262, 260, 359, 325, 329, 325, 205, 256, 349, 374, 378, 379, 459, 484, 0, 50, 81, 317, 371, 590, 608, 516, 413, 261], [226, 211, 310, 276, 280, 276, 156, 207, 300, 325, 343, 344, 424, 449, 51, 0, 46, 282, 335, 555, 573, 481, 377, 226], [182, 235, 354, 320, 325, 321, 200, 251, 344, 369, 299, 299, 379, 404, 81, 46, 0, 237, 291, 510, 528, 436, 333, 181], [82, 360, 547, 556, 561, 556, 436, 487, 392, 367, 262, 263, 343, 316, 317, 282, 238, 0, 194, 422, 440, 340, 236, 87], [116, 414, 601, 610, 615, 611, 490, 428, 336, 310, 173, 206, 176, 140, 371, 336, 292, 195, 0, 246, 264, 203, 104, 117], [344, 642, 829, 789, 794, 790, 669, 492, 399, 374, 236, 270, 187, 108, 589, 554, 511, 423, 246, 0, 73, 105, 211, 345], [361, 659, 847, 807, 811, 807, 687, 509, 417, 391, 253, 287, 205, 125, 607, 572, 528, 440, 264, 73, 0, 176, 282, 362], [261, 559, 747, 756, 760, 756, 636, 523, 430, 404, 267, 300, 218, 138, 516, 481, 438, 340, 202, 105, 177, 0, 106, 262], [158, 456, 643, 652, 657, 653, 532, 514, 421, 395, 258, 292, 261, 225, 413, 378, 334, 237, 103, 210, 283, 106, 0, 159], [20, 303, 491, 500, 504, 500, 380, 416, 323, 298, 194, 194, 273, 237, 260, 225, 182, 87, 116, 344, 361, 261, 158, 0]]};
+function driveLeg(a,b){
+  if(a===b) return {km:0, hrs:0, known:true};
+  const i = DRIVE_TABLE.names.indexOf(a), j = DRIVE_TABLE.names.indexOf(b);
+  if(i>=0 && j>=0) return {km:DRIVE_TABLE.km[i][j], hrs:DRIVE_TABLE.min[i][j]/60, known:true};
+  const km = segmentDistanceKm(getSegment(a,b));
+  return {km, hrs:km/AVG_SPEED_KMH, known:false};
 }
+// The stops a row passes through in order: start, optional via, overnight.
+function rowStops(r){ return [r.day, r.via, r.night].filter(p=>p && places[p]); }
+function isHikeRow(r){ return rowStops(r).some(p=>places[p].hike); }
 function finalizeAndRender(){
   let cursor = new Date(tripStartDate.getTime());
   rows.forEach((r, i)=>{
@@ -651,10 +673,18 @@ function finalizeAndRender(){
     r.date = fmtShort(cursor);
     cursor = addDays(cursor, 1);
 
-    const leg = legKm(r.day, r.night);
-    r.distanceKm = Math.round(leg.km/5)*5;
-    r.driveHrs = leg.km/AVG_SPEED_KMH;
-    r.knownRoad = leg.known;
+    r.hike = isHikeRow(r);
+    let km=0, hrs=0, known=true;
+    if(!r.hike){
+      const stops = rowStops(r);
+      for(let k=1;k<stops.length;k++){
+        const leg = driveLeg(stops[k-1], stops[k]);
+        km += leg.km; hrs += leg.hrs; known = known && leg.known;
+      }
+    }
+    r.distanceKm = Math.round(km);
+    r.driveHrs = hrs;
+    r.knownRoad = known;
   });
   renderAll();
 }
@@ -662,6 +692,7 @@ function recalculate(){
   syncRowsFromDOM();
   finalizeAndRender();
   setDataioStatus('Recalculated ✓');
+  scheduleSave();
 }
 
 function fmtHrs(h){
@@ -676,13 +707,13 @@ function fmtHrs(h){
 function addRow(){
   syncRowsFromDOM();
   const lastNight = rows.length ? rows[rows.length-1].night : placeNames[0];
-  rows.push({day:lastNight, night:lastNight, notes:"", hotelNotes:"", hotelBooked:false, paid:false});
+  rows.push({day:lastNight, night:lastNight, via:"", notes:"", hotelNotes:"", hotelBooked:false, paid:false, eventBooked:"na"});
   recalculate();
 }
 function insertRowAfter(i){
   syncRowsFromDOM();
   const place = rows[i].night;
-  rows.splice(i+1, 0, {day:place, night:place, notes:"", hotelNotes:"", hotelBooked:false, paid:false});
+  rows.splice(i+1, 0, {day:place, night:place, via:"", notes:"", hotelNotes:"", hotelBooked:false, paid:false, eventBooked:"na"});
   recalculate();
 }
 function deleteRow(i){
@@ -691,11 +722,20 @@ function deleteRow(i){
   rows.splice(i,1);
   recalculate();
 }
+// Reset replaces the saved itinerary too, so it takes two clicks.
+let resetArmed = null;
+function confirmReset(btn){
+  if(resetArmed){ clearTimeout(resetArmed); resetArmed=null; btn.textContent='Reset to original'; resetRows(); return; }
+  btn.textContent = 'Click again to reset itinerary';
+  resetArmed = setTimeout(()=>{ resetArmed=null; btn.textContent='Reset to original'; }, 4000);
+}
 function resetRows(){
   rows = defaultRows();
   tripStartDate = new Date(Date.UTC(2026,11,13));
+  document.getElementById('startDateInput').value = fmtISODate(tripStartDate);
   finalizeAndRender();
   setDataioStatus('Reset ✓');
+  scheduleSave(0);
 }
 
 // =====================================================================
@@ -735,15 +775,9 @@ async function fetchLiveRoute(a, b){
 async function renderMap(){
   mapLayer.clearLayers();
   const bounds = [];
-  // Build the ordered sequence of stops actually visited: night(i-1) -> day(i) -> night(i)
+  // Build the ordered sequence of stops actually visited: day -> via -> night, row by row
   const sequence = [];
-  rows.forEach((r,i)=>{
-    if(i===0) sequence.push(r.night);
-    else{
-      sequence.push(r.day);
-      sequence.push(r.night);
-    }
-  });
+  rows.forEach((r,i)=>{ rowStops(r).forEach(p=>sequence.push(p)); });
   for(let i=1;i<sequence.length;i++){
     const a=sequence[i-1], b=sequence[i];
     if(a===b || !places[a] || !places[b]) continue;
@@ -756,7 +790,7 @@ async function renderMap(){
   }
   const seen = new Set();
   rows.forEach((r,i)=>{
-    [{place:r.night, label:`Night ${i+1}`}, ...(r.day!==r.night?[{place:r.day, label:`Day ${i+1}`}]:[])].forEach(({place,label})=>{
+    [{place:r.night, label:`Night ${i+1}`}, ...(r.via?[{place:r.via, label:`Via ${i+1}`}]:[]), ...(r.day!==r.night?[{place:r.day, label:`Day ${i+1}`}]:[])].forEach(({place,label})=>{
       const p = places[place];
       if(!p || seen.has(place)) return;
       seen.add(place);
@@ -797,6 +831,23 @@ function renderHero(){
   `;
 }
 
+// Event booked: Yes / No / N/A. Older saves stored true/false — a ticked
+// box becomes Yes, anything else becomes N/A.
+const EVENT_LABELS = {yes:"Yes", no:"No", na:"N/A"};
+function normEvent(v){
+  if(v===true) return "yes";
+  if(v==="yes"||v==="no"||v==="na") return v;
+  return "na";
+}
+function eventOptionsHTML(selected){
+  const cur = normEvent(selected);
+  return Object.entries(EVENT_LABELS).map(([k,l])=>`<option value="${k}" ${k===cur?'selected':''}>${l}</option>`).join('');
+}
+
+// Inline handlers on a <textarea> see the element's own `rows` attribute
+// before the page's `rows` array, so they go through this helper.
+function setRowField(i, field, value){ if(rows[i]) rows[i][field] = value; }
+
 function placeOptionsHTML(selected){
   return placeNames.map(n=>`<option value="${n}" ${n===selected?'selected':''}>${n}</option>`).join('');
 }
@@ -806,8 +857,8 @@ function renderTable(){
   tbody.innerHTML = rows.map((r,i)=>{
     const np = places[r.night] || {};
     const rowClasses = [np.hike ? 'hike-row':'', np.noNight ? 'nonight-row':''].join(' ').trim();
-    const distLabel = `${r.distanceKm||0} km${r.knownRoad===false?'*':''}`;
-    const timeLabel = fmtHrs(r.driveHrs||0);
+    const distLabel = r.hike ? '—' : `${(r.distanceKm||0).toLocaleString()} km${r.knownRoad===false?'*':''}`;
+    const timeLabel = r.hike ? 'Hike' : fmtHrs(r.driveHrs||0);
     const notesHTML = (r.notes||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
 
     if(PUBLIC_MODE){
@@ -816,12 +867,14 @@ function renderTable(){
           <td class="row-n">${i+1}</td>
           <td class="row-date">${r.date||''}</td>
           <td class="col-day">${r.day}</td>
+          <td class="col-via${r.via?'':' row-via-empty'}">${r.via||'—'}</td>
           <td class="col-night">${r.night}</td>
           <td class="row-dist">${distLabel}</td>
           <td class="row-time">${timeLabel}</td>
           <td class="col-notes"><div class="public-notes">${notesHTML}</div></td>
           <td style="text-align:center;">${r.hotelBooked?'✓':'—'}</td>
           <td style="text-align:center;">${r.paid?'✓':'—'}</td>
+          <td style="text-align:center;">${EVENT_LABELS[normEvent(r.eventBooked)]}</td>
         </tr>
       `;
     }
@@ -830,16 +883,18 @@ function renderTable(){
         <td class="row-n">${i+1}</td>
         <td class="row-date">${r.date||''}</td>
         <td class="col-day"><select class="row-select row-day" onchange="recalculate()">${placeOptionsHTML(r.day)}</select></td>
+        <td class="col-via"><select class="row-select row-via" onchange="recalculate()"><option value="" ${r.via?'':'selected'}>—</option>${placeOptionsHTML(r.via)}</select></td>
         <td class="col-night"><select class="row-select row-night" onchange="recalculate()">${placeOptionsHTML(r.night)}</select></td>
         <td class="row-dist">${distLabel}</td>
         <td class="row-time">${timeLabel}</td>
-        <td class="col-notes"><textarea class="row-notes" rows="3" placeholder="Plans, reminders, activity notes…" oninput="rows[${i}].notes=this.value">${(r.notes||'').replace(/</g,'&lt;')}</textarea></td>
+        <td class="col-notes"><textarea class="row-notes" rows="3" placeholder="Plans, reminders, activity notes…" oninput="setRowField(${i},'notes',this.value)">${(r.notes||'').replace(/</g,'&lt;')}</textarea></td>
         <td class="col-hotelnotes">
-          <textarea class="row-notes row-hotelnotes" rows="3" placeholder="Hotel name, confirmation #, check-in time…" oninput="rows[${i}].hotelNotes=this.value">${(r.hotelNotes||'').replace(/</g,'&lt;')}</textarea>
+          <textarea class="row-notes row-hotelnotes" rows="3" placeholder="Hotel name, confirmation #, check-in time…" oninput="setRowField(${i},'hotelNotes',this.value)">${(r.hotelNotes||'').replace(/</g,'&lt;')}</textarea>
           <div class="need-booking" id="needbook-${i}" style="display:${r.hotelBooked?'none':'block'}">NEED BOOKING</div>
         </td>
         <td style="text-align:center;"><input type="checkbox" class="row-check" ${r.hotelBooked?'checked':''} onchange="rows[${i}].hotelBooked=this.checked; document.getElementById('needbook-${i}').style.display=this.checked?'none':'block';"></td>
         <td style="text-align:center;"><input type="checkbox" class="row-check row-check-paid" ${r.paid?'checked':''} onchange="rows[${i}].paid=this.checked;"></td>
+        <td style="text-align:center;"><select class="row-select row-event" style="min-width:76px;width:auto;margin-top:14px;" onchange="rows[${i}].eventBooked=this.value;">${eventOptionsHTML(r.eventBooked)}</select></td>
         <td class="row-actions">
           <button title="Insert day after" onclick="insertRowAfter(${i})">+</button>
           <button title="Delete day" class="del" onclick="deleteRow(${i})">×</button>
@@ -849,7 +904,7 @@ function renderTable(){
   }).join('');
   const anyUnknown = rows.some((r)=> r.knownRoad===false);
   if(anyUnknown){
-    tbody.innerHTML += `<tr><td colspan="${PUBLIC_MODE?9:10}" style="color:var(--ice-dim);font-size:11.5px;padding-top:4px;">* straight-line estimate somewhere in that leg — no plotted highway for one of the pairs</td></tr>`;
+    tbody.innerHTML += `<tr><td colspan="${PUBLIC_MODE?11:13}" style="color:var(--ice-dim);font-size:11.5px;padding-top:4px;">* estimate only — no road data for one of the legs in that row</td></tr>`;
   }
 }
 
@@ -937,7 +992,7 @@ function exportICS(){
     if(p && p.noNight) return;
     const nextDay = addDays(r.dateObj,1);
     const fmt = x=>`${x.getUTCFullYear()}${pad(x.getUTCMonth()+1)}${pad(x.getUTCDate())}`;
-    const summary = r.day===r.night ? r.night : `${r.day} → ${r.night}`;
+    const summary = r.via ? `${r.day} → ${r.via} → ${r.night}` : (r.day===r.night ? r.night : `${r.day} → ${r.night}`);
     const descParts = [r.notes, (!PUBLIC_MODE && r.hotelNotes) ? `Hotel: ${r.hotelNotes}` : ''].filter(Boolean).join(' — ');
     ics += "BEGIN:VEVENT\r\n";
     ics += `SUMMARY:Day ${i+1}: ${summary}\r\n`;
@@ -949,32 +1004,38 @@ function exportICS(){
     ics += "END:VEVENT\r\n";
   });
   ics += "END:VCALENDAR\r\n";
-  const blob = new Blob([ics], {type:'text/calendar'});
+  offerDownload('south-island-grand-loop.ics', ics, 'text/calendar');
+}
+
+// ---------------- JSON EXPORT / IMPORT ----------------
+function buildState(){
+  syncRowsFromDOM();
+  return {
+    version:8,
+    tripStartDate: fmtISODate(tripStartDate),
+    rows: rows.map(r=>({day:r.day, via:r.via||'', night:r.night, notes:r.notes||'', hotelNotes:r.hotelNotes||'', hotelBooked:!!r.hotelBooked, paid:!!r.paid, eventBooked:normEvent(r.eventBooked)})),
+    budget: JSON.parse(JSON.stringify(budget)),
+  };
+}
+// Hands a file to the viewer. Inside the claude.ai artifact the page asks
+// its parent tab page to save it (artifact pages can't download directly);
+// opened as a normal file it uses a plain browser download.
+function offerDownload(filename, text, mime){
+  if(SYNC.embedded && SYNC.parentReady){
+    window.parent.postMessage({nz:'download', filename, data:text, mime}, '*');
+    return;
+  }
+  const blob = new Blob([text], {type:mime});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'south-island-grand-loop.ics';
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
 }
-
-// ---------------- JSON EXPORT / IMPORT ----------------
 function exportJSON(){
-  syncRowsFromDOM();
-  const state = {
-    version:4,
-    tripStartDate: fmtISODate(tripStartDate),
-    rows: rows.map(r=>({day:r.day, night:r.night, notes:r.notes, hotelNotes:r.hotelNotes, hotelBooked:r.hotelBooked, paid:r.paid})),
-    budget,
-  };
-  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'south-island-trip-data.json';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setDataioStatus('Downloaded ✓');
+  offerDownload('south-island-trip-data.json', JSON.stringify(buildState(),null,2), 'application/json');
+  setDataioStatus('Download offered ✓');
 }
 // Maps older/renamed place names to their current equivalent, so older
 // downloaded JSON files keep working after the place list changes.
@@ -986,11 +1047,7 @@ function resolvePlace(name){
   if(legacyPlaceMap[name]) return legacyPlaceMap[name];
   return placeNames[0];
 }
-function importJSONFile(file){
-  const reader = new FileReader();
-  reader.onload = (e)=>{
-    try{
-      const state = JSON.parse(e.target.result);
+function applyState(state){
       if(state.tripStartDate){
         const [y,m,dd] = state.tripStartDate.split('-').map(Number);
         tripStartDate = new Date(Date.UTC(y,m-1,dd));
@@ -999,7 +1056,8 @@ function importJSONFile(file){
         rows = state.rows.map(r=>({
           day: resolvePlace(r.day),
           night: resolvePlace(r.night),
-          notes: r.notes||'', hotelNotes: r.hotelNotes||'', hotelBooked: !!r.hotelBooked, paid: !!r.paid,
+          via: (r.via && (placeNames.includes(r.via) || legacyPlaceMap[r.via])) ? resolvePlace(r.via) : '',
+          notes: r.notes||'', hotelNotes: r.hotelNotes||'', hotelBooked: !!r.hotelBooked, paid: !!r.paid, eventBooked: normEvent(r.eventBooked),
         }));
       }
       if(state.budget && typeof state.budget === 'object'){
@@ -1007,9 +1065,17 @@ function importJSONFile(file){
           if(Array.isArray(state.budget[cat])) budget[cat] = state.budget[cat].map(it=>({detail:it.detail||'', nzd:it.nzd??'', usd:it.usd??''}));
         });
       }
+      document.getElementById('startDateInput').value = fmtISODate(tripStartDate);
       finalizeAndRender();
       renderBudget();
+}
+function importJSONFile(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      applyState(JSON.parse(e.target.result));
       setDataioStatus('Loaded ✓');
+      scheduleSave(0);
     }catch(err){
       setDataioStatus('Could not read that file — is it a trip data .json?');
     }
@@ -1021,6 +1087,76 @@ function setDataioStatus(msg){
   el.textContent = msg;
   setTimeout(()=>{ if(el.textContent===msg) el.textContent=''; }, 4000);
 }
+
+// =====================================================================
+// ONLINE SAVING (claude.ai artifact only)
+// When this planner runs inside the "South Island Grand Loop" artifact,
+// the tab page around it keeps the trip in the artifact's database.
+// This page sends its state up after each edit and receives the saved
+// state (and other devices' changes) back. Opened as a plain file, none
+// of this runs and the JSON download/upload is the way to save.
+// =====================================================================
+const SYNC = {
+  embedded: window.parent !== window,
+  parentReady: false,   // parent answered and has a database
+  booted: false,        // initial render done; edits before this aren't saves
+  dirty: false,         // local edits not yet confirmed saved
+  timer: null,
+};
+function setSyncStatus(text, kind){
+  const el = document.getElementById('syncStatus');
+  if(!el) return;
+  el.hidden = !text;
+  el.textContent = text||'';
+  el.className = 'sync-status' + (kind ? ' '+kind : '');
+}
+function scheduleSave(delay){
+  if(!SYNC.booted || PUBLIC_MODE || !SYNC.parentReady) return;
+  SYNC.dirty = true;
+  setSyncStatus('Saving…');
+  clearTimeout(SYNC.timer);
+  SYNC.timer = setTimeout(()=>{
+    window.parent.postMessage({nz:'save', state: buildState()}, '*');
+  }, delay===undefined ? 1200 : delay);
+}
+window.addEventListener('message', (e)=>{
+  if(e.source !== window.parent) return;
+  const m = e.data || {};
+  if(m.nz === 'ready'){
+    SYNC.parentReady = !!m.db;
+    if(PUBLIC_MODE) return;
+    if(!m.db) setSyncStatus('Not saving — sign in to claude.ai to save changes', 'warn');
+    else if(m.readOnly) { SYNC.parentReady = false; setSyncStatus('View only — your changes won\'t be saved', 'warn'); }
+    else setSyncStatus('Loading saved trip…');
+  }
+  else if(m.nz === 'state'){
+    if(SYNC.dirty && !PUBLIC_MODE) return;   // don't overwrite edits in progress
+    applyState(m.state);
+    if(!PUBLIC_MODE && SYNC.parentReady) setSyncStatus('All changes saved', 'ok');
+  }
+  else if(m.nz === 'empty'){
+    if(!PUBLIC_MODE && SYNC.parentReady) scheduleSave(0);  // first run: store the built-in plan
+  }
+  else if(m.nz === 'saved'){
+    SYNC.dirty = false;
+    setSyncStatus('All changes saved', 'ok');
+  }
+  else if(m.nz === 'saveError'){
+    setSyncStatus('Couldn\'t save — ' + (m.message||'try again'), 'warn');
+  }
+  else if(m.nz === 'stale'){
+    if(!PUBLIC_MODE) setSyncStatus('Can\'t reach saved data — changes may not be saved', 'warn');
+  }
+  else if(m.nz === 'downloadResult'){
+    setDataioStatus(m.ok ? 'Saved ✓' : (m.message||'Download not saved'));
+  }
+});
+// Any edit in the itinerary or budget counts as a change to save.
+['input','change'].forEach(ev=>document.addEventListener(ev, (e)=>{
+  if(e.target && e.target.id === 'importFile') return;
+  if(e.target && e.target.closest && e.target.closest('#packing')) return;
+  scheduleSave();
+}, true));
 
 // ---------------- WIRING ----------------
 function handleStartDateChange(e){
@@ -1052,7 +1188,7 @@ function applyPublicMode(){
   const heroSub = document.getElementById('heroSubText');
   if(heroSub) heroSub.textContent = 'A read-only look at the day-by-day plan — dates, stops, drive times, and notes.';
   const itinDesc = document.getElementById('itinDescText');
-  if(itinDesc) itinDesc.textContent = 'Each row is a day, with a start point and an overnight stop.';
+  if(itinDesc) itinDesc.textContent = 'Each row is a day: where you start, any stop you go via, and where you sleep.';
 }
 applyPublicMode();
 
@@ -1061,6 +1197,8 @@ document.getElementById('startDateInput').value = fmtISODate(tripStartDate);
 recalculate();
 renderPacking();
 renderBudget();
+SYNC.booted = true;
+if(SYNC.embedded) window.parent.postMessage({nz:'hello', public: PUBLIC_MODE}, '*');
 </script>
 </body>
 </html>
